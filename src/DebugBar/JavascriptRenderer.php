@@ -84,7 +84,7 @@ class JavascriptRenderer
         $this->debugBar = $debugBar;
 
         if ($baseUrl === null) {
-            $baseUrl = '/vendor/maximebf/debugbar/src/DebugBar/Resources';
+            $baseUrl = '/vendor/novasa/debugbar/src/DebugBar/Resources';
         }
         $this->baseUrl = $baseUrl;
 
