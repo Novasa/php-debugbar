@@ -418,6 +418,7 @@ if (typeof(PhpDebugBar) == 'undefined') {
          * @this {DebugBar}
          */
         registerResizeHandler: function() {
+            if (typeof this.resize.bind == 'undefined') return;
             var f = this.resize.bind(this);
             this.respCSSSize = 0;
             $(window).resize(f);
