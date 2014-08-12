@@ -1,5 +1,13 @@
 # Changelog
 
+2014-03-23:
+
+ - added possibility for widgets to call server side commands (ServerHandler namespace)
+ - OpenHandler moved to ServerHandler
+ - Bridge\CacheCacheCollector moved to Bridge\CacheCache\CacheCacheCollector
+ - new widget system
+ - DataCollector\Renderable renamed to DataCollector\WidgetProvider
+
 2014-03-22:
 
  - added AssetProvider interface

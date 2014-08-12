@@ -5,6 +5,7 @@ namespace DebugBar\Tests;
 use DebugBar\JavascriptRenderer;
 use DebugBar\DebugBar;
 use DebugBar\StandardDebugBar;
+use DebugBar\Widget\Indicator;
 
 class JavascriptRendererTest extends DebugBarTestCase
 {
@@ -26,19 +27,16 @@ class JavascriptRendererTest extends DebugBarTestCase
             'variable_name' => 'foovar',
             'initialization' => JavascriptRenderer::INITIALIZE_CONTROLS,
             'enable_jquery_noconflict' => true,
-            'controls' => array(
-                'memory' => array(
-                    "icon" => "cogs",
-                    "map" => "memory.peak_usage_str",
-                    "default" => "'0B'"
-                )
+            'widgets' => array(
+                'memory' => new Indicator('cogs', 'memory', '"OB"')
             ),
-            'disable_controls' => array('messages'),
+            'disable_widgets' => array('messages'),
             'ignore_collectors' => 'config',
             'ajax_handler_classname' => 'AjaxFoo',
             'ajax_handler_bind_to_jquery' => false,
             'open_handler_classname' => 'OpenFoo',
-            'open_handler_url' => 'open.php'
+            'server_handler_url' => 'server.php',
+            'ctor_options' => array('foo' => 'bar')
         ));
 
         $this->assertEquals('/foo', $this->r->getBasePath());
@@ -48,16 +46,17 @@ class JavascriptRendererTest extends DebugBarTestCase
         $this->assertEquals('foovar', $this->r->getVariableName());
         $this->assertEquals(JavascriptRenderer::INITIALIZE_CONTROLS, $this->r->getInitialization());
         $this->assertTrue($this->r->isJqueryNoConflictEnabled());
-        $controls = $this->r->getControls();
-        $this->assertCount(2, $controls);
-        $this->assertArrayHasKey('memory', $controls);
-        $this->assertArrayHasKey('messages', $controls);
-        $this->assertNull($controls['messages']);
+        $widgets = $this->r->getWidgets();
+        $this->assertCount(2, $widgets);
+        $this->assertArrayHasKey('memory', $widgets);
+        $this->assertArrayHasKey('messages', $widgets);
+        $this->assertNull($widgets['messages']);
         $this->assertContains('config', $this->r->getIgnoredCollectors());
         $this->assertEquals('AjaxFoo', $this->r->getAjaxHandlerClass());
         $this->assertFalse($this->r->isAjaxHandlerBoundToJquery());
         $this->assertEquals('OpenFoo', $this->r->getOpenHandlerClass());
-        $this->assertEquals('open.php', $this->r->getOpenHandlerUrl());
+        $this->assertEquals('server.php', $this->r->getServerHandlerUrl());
+        $this->assertArrayHasKey('foo', $this->r->getConstructorOptions());
     }
 
     public function testAddAssets()
@@ -99,7 +98,7 @@ class JavascriptRendererTest extends DebugBarTestCase
     public function testRenderFullInitialization()
     {
         $this->debugbar->addCollector(new \DebugBar\DataCollector\MessagesCollector());
-        $this->r->addControl('time', array('icon' => 'time', 'map' => 'time', 'default' => '"0s"'));
+        $this->r->addWidget('time', new Indicator('time', 'time', '"0s"'));
         $expected = rtrim(file_get_contents(__DIR__ . '/full_init.html'));
         $this->assertStringStartsWith($expected, $this->r->render());
     }
@@ -110,7 +109,8 @@ class JavascriptRendererTest extends DebugBarTestCase
         $this->r->setJavascriptClass('Foobar');
         $this->r->setVariableName('foovar');
         $this->r->setAjaxHandlerClass(false);
-        $this->assertStringStartsWith("<script type=\"text/javascript\">\nvar foovar = new Foobar();\nfoovar.addDataSet(", $this->r->render());
+        $this->r->setEnableJqueryNoConflict(true);
+        $this->assertStringStartsWith("<script type=\"text/javascript\">\njQuery.noConflict(true);\nvar foovar = new Foobar({});\nfoovar.addDataSet(", $this->r->render());
     }
 
     public function testJQueryNoConflictAutoDisabling()

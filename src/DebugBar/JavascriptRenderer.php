@@ -10,7 +10,7 @@
 
 namespace DebugBar;
 
-use DebugBar\DataCollector\Renderable;
+use DebugBar\DataCollector\WidgetProvider;
 use DebugBar\DataCollector\AssetProvider;
 
 /**
@@ -62,7 +62,7 @@ class JavascriptRenderer
 
     protected $initialization;
 
-    protected $controls = array();
+    protected $widgets = array();
 
     protected $ignoredCollectors = array();
 
@@ -72,7 +72,9 @@ class JavascriptRenderer
 
     protected $openHandlerClass = 'PhpDebugBar.OpenHandler';
 
-    protected $openHandlerUrl;
+    protected $serverHandlerUrl;
+
+    protected $constructorOptions = array();
 
     /**
      * @param \DebugBar\DebugBar $debugBar
@@ -108,13 +110,14 @@ class JavascriptRenderer
      *  - variable_name
      *  - initialization
      *  - enable_jquery_noconflict
-     *  - controls
-     *  - disable_controls
+     *  - widgets
+     *  - disable_widgets
      *  - ignore_collectors
      *  - ajax_handler_classname
      *  - ajax_handler_bind_to_jquery
      *  - open_handler_classname
-     *  - open_handler_url
+     *  - server_handler_url
+     *  - ctor_options
      *
      * @param array $options [description]
      */
@@ -141,14 +144,14 @@ class JavascriptRenderer
         if (array_key_exists('enable_jquery_noconflict', $options)) {
             $this->setEnableJqueryNoConflict($options['enable_jquery_noconflict']);
         }
-        if (array_key_exists('controls', $options)) {
-            foreach ($options['controls'] as $name => $control) {
-                $this->addControl($name, $control);
+        if (array_key_exists('widgets', $options)) {
+            foreach ($options['widgets'] as $name => $widget) {
+                $this->addWidget($name, $widget);
             }
         }
-        if (array_key_exists('disable_controls', $options)) {
-            foreach ((array) $options['disable_controls'] as $name) {
-                $this->disableControl($name);
+        if (array_key_exists('disable_widgets', $options)) {
+            foreach ((array) $options['disable_widgets'] as $name) {
+                $this->disableWidget($name);
             }
         }
         if (array_key_exists('ignore_collectors', $options)) {
@@ -165,8 +168,11 @@ class JavascriptRenderer
         if (array_key_exists('open_handler_classname', $options)) {
             $this->setOpenHandlerClass($options['open_handler_classname']);
         }
-        if (array_key_exists('open_handler_url', $options)) {
-            $this->setOpenHandlerUrl($options['open_handler_url']);
+        if (array_key_exists('server_handler_url', $options)) {
+            $this->setServerHandlerUrl($options['server_handler_url']);
+        }
+        if (array_key_exists('ctor_options', $options)) {
+            $this->setConstructorOptions($options['ctor_options']);
         }
     }
 
@@ -334,54 +340,6 @@ class JavascriptRenderer
     }
 
     /**
-     * Adds a control to initialize
-     *
-     * Possible options:
-     *  - icon: icon name
-     *  - tooltip: string
-     *  - widget: widget class name
-     *  - title: tab title
-     *  - map: a property name from the data to map the control to
-     *  - default: a js string, default value of the data map
-     *
-     * "icon" or "widget" are at least needed
-     *
-     * @param string $name
-     * @param array $options
-     */
-    public function addControl($name, array $options)
-    {
-        if (count(array_intersect(array_keys($options), array('icon', 'widget', 'tab', 'indicator'))) === 0) {
-            throw new DebugBarException("Not enough options for control '$name'");
-        }
-        $this->controls[$name] = $options;
-        return $this;
-    }
-
-    /**
-     * Disables a control
-     *
-     * @param string $name
-     */
-    public function disableControl($name)
-    {
-        $this->controls[$name] = null;
-        return $this;
-    }
-
-    /**
-     * Returns the list of controls
-     *
-     * This does not include controls provided by collectors
-     *
-     * @return array
-     */
-    public function getControls()
-    {
-        return $this->controls;
-    }
-
-    /**
      * Ignores widgets provided by a collector
      *
      * @param string $name
@@ -468,24 +426,80 @@ class JavascriptRenderer
     }
 
     /**
-     * Sets the url of the open handler
+     * Sets the url of the server handler
      *
      * @param string $url
      */
-    public function setOpenHandlerUrl($url)
+    public function setServerHandlerUrl($url)
     {
-        $this->openHandlerUrl = $url;
+        $this->serverHandlerUrl = $url;
         return $this;
     }
 
     /**
-     * Returns the url for the open handler
+     * Returns the url for the server handler
      *
      * @return string
      */
-    public function getOpenHandlerUrl()
+    public function getServerHandlerUrl()
     {
-        return $this->openHandlerUrl;
+        return $this->serverHandlerUrl;
+    }
+
+    /**
+     * Sets debugbar's constructor options
+     *
+     * @param array $options
+     */
+    public function setConstructorOptions(array $options)
+    {
+        $this->constructorOptions = $options;
+        return $this;
+    }
+
+    /**
+     * Returns debugbar's constructor options
+     *
+     * @return array
+     */
+    public function getConstructorOptions()
+    {
+        return $this->constructorOptions;
+    }
+
+    /**
+     * Adds a widget
+     *
+     * @param string $name
+     * @param AbstractWidget|DataMap $widget
+     */
+    public function addWidget($name, $widget)
+    {
+        $this->widgets[$name] = $widget;
+        return $this;
+    }
+
+    /**
+     * Disables a widget
+     *
+     * @param string $name
+     */
+    public function disableWidget($name)
+    {
+        $this->widgets[$name] = null;
+        return $this;
+    }
+
+    /**
+     * Returns the list of widgets
+     *
+     * This does not include widgets provided by collectors
+     *
+     * @return array
+     */
+    public function getWidgets()
+    {
+        return $this->widgets;
     }
 
     /**
@@ -808,7 +822,12 @@ class JavascriptRenderer
         $js = '';
 
         if (($this->initialization & self::INITIALIZE_CONSTRUCTOR) === self::INITIALIZE_CONSTRUCTOR) {
-            $js .= sprintf("var %s = new %s();\n", $this->variableName, $this->javascriptClass);
+            $ctorOptions = $this->constructorOptions;
+            if ($this->serverHandlerUrl) {
+                $ctorOptions['serverHandlerUrl'] = $this->serverHandlerUrl;
+            }
+            $js .= sprintf("var %s = new %s(%s);\n", $this->variableName,
+                $this->javascriptClass, json_encode($ctorOptions, JSON_FORCE_OBJECT));
         }
 
         if (($this->initialization & self::INITIALIZE_CONTROLS) === self::INITIALIZE_CONTROLS) {
@@ -822,10 +841,8 @@ class JavascriptRenderer
             }
         }
 
-        if ($this->openHandlerUrl !== null) {
-            $js .= sprintf("%s.setOpenHandler(new %s(%s));\n", $this->variableName,
-                $this->openHandlerClass,
-                json_encode(array("url" => $this->openHandlerUrl)));
+        if ($this->debugBar->isDataPersisted() && $this->serverHandlerUrl !== null) {
+            $js .= sprintf("%s.setOpenHandler(new %s());\n", $this->variableName, $this->openHandlerClass);
         }
 
         return $js;
@@ -834,7 +851,7 @@ class JavascriptRenderer
     /**
      * Returns the js code needed to initialized the controls and data mapping of the debug bar
      *
-     * Controls can be defined by collectors themselves or using {@see addControl()}
+     * Controls can be defined by collectors themselves or using {@see addWidget()}
      *
      * @param string $varname Debug bar's variable name
      * @return string
@@ -843,46 +860,46 @@ class JavascriptRenderer
     {
         $js = '';
         $dataMap = array();
-        $excludedOptions = array('indicator', 'tab', 'map', 'default', 'widget', 'position');
 
-        // finds controls provided by collectors
+        // finds widgets provided by collectors
         $widgets = array();
         foreach ($this->debugBar->getCollectors() as $collector) {
-            if (($collector instanceof Renderable) && !in_array($collector->getName(), $this->ignoredCollectors)) {
+            if (($collector instanceof WidgetProvider) && !in_array($collector->getName(), $this->ignoredCollectors)) {
                 if ($w = $collector->getWidgets()) {
                     $widgets = array_merge($widgets, $w);
                 }
             }
         }
-        $controls = array_merge($widgets, $this->controls);
+        $widgets = array_merge($widgets, $this->widgets);
 
 
-        foreach (array_filter($controls) as $name => $options) {
-            $opts = array_diff_key($options, array_flip($excludedOptions));
-
-            if (isset($options['tab']) || isset($options['widget'])) {
-                if (!isset($opts['title'])) {
+        foreach (array_filter($widgets) as $name => $widget) {
+            if ($widget instanceof Widget\Tab) {
+                $opts = $widget->getConstructorOptions();
+                if (empty($opts['title'])) {
                     $opts['title'] = ucfirst(str_replace('_', ' ', $name));
                 }
+                $widgetClassName = $widget->getWidgetClassName();
                 $js .= sprintf("%s.addTab(\"%s\", new %s({%s%s}));\n",
                     $varname,
                     $name,
-                    isset($options['tab']) ? $options['tab'] : 'PhpDebugBar.DebugBar.Tab',
+                    $widget->getClassName(),
                     substr(json_encode($opts, JSON_FORCE_OBJECT), 1, -1),
-                    isset($options['widget']) ? sprintf('%s"widget": new %s()', count($opts) ? ', ' : '', $options['widget']) : ''
+                    $widgetClassName ? sprintf('%s"widget":new %s(%s)',
+                        count($opts) ? ',' : '', $widgetClassName, json_encode($widget->getWidgetCtorOptions(), JSON_FORCE_OBJECT)) : ''
                 );
-            } else if (isset($options['indicator']) || isset($options['icon'])) {
+            } else if ($widget instanceof Widget\Indicator) {
                 $js .= sprintf("%s.addIndicator(\"%s\", new %s(%s), \"%s\");\n",
                     $varname,
                     $name,
-                    isset($options['indicator']) ? $options['indicator'] : 'PhpDebugBar.DebugBar.Indicator',
-                    json_encode($opts, JSON_FORCE_OBJECT),
-                    isset($options['position']) ? $options['position'] : 'right'
+                    $widget->getClassName(),
+                    json_encode($widget->getConstructorOptions(), JSON_FORCE_OBJECT),
+                    $widget->getPosition()
                 );
             }
 
-            if (isset($options['map']) && isset($options['default'])) {
-                $dataMap[$name] = array($options['map'], $options['default']);
+            if ($widget instanceof Widget\DataMap) {
+                $dataMap[$name] = array($widget->getMapping(), $widget->getDefaultValue());
             }
         }
 
